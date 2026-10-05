@@ -1,0 +1,25 @@
+server:
+  port: 8086
+
+spring:
+  application:
+    name: pattern-service
+
+pattern-lab:
+  # Chain of Responsibility - Lab 2: PaymentLimitRule bu tutarın üzerindeki order'ları reddeder.
+  checkout-limit-amount: 5000.00
+
+  # Provider simulator'ların (Strategy/Adapter/Template/Facade/Decorator) simüle ettiği network/işlem gecikmesi.
+  provider-delay-ms: 150
+
+  singleton-lab:
+    # Lab 9 - BAD senaryoda request'in kendi field yazısı ile field okuması arasına konan LAB ONLY bekleme.
+    # 01-atomic-service'teki race-window ile aynı teknik: bug'ı YARATMAZ, var olan pencereyi deterministik
+    # şekilde gözlemlenebilir yapar. Üst sınır: makineyi kilitlememek için.
+    max-hold-ms: 10000
+
+logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%-25thread] %-32.32logger{0} : %msg%n"
+  level:
+    root: INFO

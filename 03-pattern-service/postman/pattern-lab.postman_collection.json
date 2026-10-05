@@ -1,0 +1,127 @@
+{
+  "info": {
+    "name": "03 - Design Patterns Lab",
+    "description": "03-pattern-service endpoint'leri. Checkout/Payment Processing domain'i uzerinde 9 design pattern lab'i.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8086" }
+  ],
+  "item": [
+    {
+      "name": "Lab 1 - Strategy + Resolver",
+      "item": [
+        { "name": "strategy/bad (CREDIT_CARD)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/strategy/bad",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"ORDER-1001\",\n  \"amount\": 1250.00,\n  \"paymentType\": \"CREDIT_CARD\"\n}" } } },
+        { "name": "strategy/good (CREDIT_CARD)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/strategy/good",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"ORDER-1001\",\n  \"amount\": 1250.00,\n  \"paymentType\": \"CREDIT_CARD\"\n}" } } },
+        { "name": "strategy/good (WALLET)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/strategy/good",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"ORDER-1002\",\n  \"amount\": 500.00,\n  \"paymentType\": \"WALLET\"\n}" } } },
+        { "name": "strategy/good (BANK_TRANSFER)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/strategy/good",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"ORDER-1003\",\n  \"amount\": 750.00,\n  \"paymentType\": \"BANK_TRANSFER\"\n}" } } }
+      ]
+    },
+    {
+      "name": "Lab 2 - Chain of Responsibility",
+      "item": [
+        { "name": "chain/good (all pass)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/chain/good",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"ORD-1\",\n  \"customerId\": \"CUST-1\",\n  \"amount\": 100,\n  \"customerBlocked\": false,\n  \"simulateFraud\": false,\n  \"stockAvailable\": true\n}" } } },
+        { "name": "chain/good (fail-fast at FRAUD)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/chain/good",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"ORD-2\",\n  \"customerId\": \"CUST-1\",\n  \"amount\": 100,\n  \"customerBlocked\": false,\n  \"simulateFraud\": true,\n  \"stockAvailable\": true\n}" } } },
+        { "name": "chain/bad (fail-fast at FRAUD)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/chain/bad",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"ORD-3\",\n  \"customerId\": \"CUST-1\",\n  \"amount\": 100,\n  \"customerBlocked\": false,\n  \"simulateFraud\": true,\n  \"stockAvailable\": true\n}" } } }
+      ]
+    },
+    {
+      "name": "Lab 3 - Adapter",
+      "item": [
+        { "name": "adapter/bad (Bank A)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/adapter/bad",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"ORD-A1\",\n  \"amount\": 100\n}" } } },
+        { "name": "adapter/good (Bank A)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/adapter/good",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"ORD-A2\",\n  \"amount\": 100,\n  \"provider\": \"BANK_A\"\n}" } } },
+        { "name": "adapter/good (Bank B)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/adapter/good",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"ORD-A3\",\n  \"amount\": 100,\n  \"provider\": \"BANK_B\"\n}" } } }
+      ]
+    },
+    {
+      "name": "Lab 4 - Template Method",
+      "item": [
+        { "name": "template/good/BANK_A", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/template/good/BANK_A",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"ORD-T1\",\n  \"amount\": 100\n}" } } },
+        { "name": "template/good/BANK_B", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/template/good/BANK_B",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"ORD-T2\",\n  \"amount\": 100\n}" } } },
+        { "name": "template/bad/BANK_A", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/template/bad/BANK_A",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"ORD-T3\",\n  \"amount\": 100\n}" } } },
+        { "name": "template/bad/BANK_B", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/template/bad/BANK_B",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"ORD-T4\",\n  \"amount\": 100\n}" } } }
+      ]
+    },
+    {
+      "name": "Lab 5 - Facade",
+      "item": [
+        { "name": "facade/bad", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/facade/bad",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"ORD-F1\",\n  \"customerId\": \"CUST-1\",\n  \"amount\": 100\n}" } } },
+        { "name": "facade/good", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/facade/good",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"ORD-F2\",\n  \"customerId\": \"CUST-1\",\n  \"amount\": 100\n}" } } }
+      ]
+    },
+    {
+      "name": "Lab 6 - Builder",
+      "item": [
+        { "name": "builder/good", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/builder/good",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"ORD-B1\",\n  \"customerId\": \"CUST-1\",\n  \"amount\": 250.50,\n  \"merchantReference\": \"MREF-1\"\n}" } } }
+      ]
+    },
+    {
+      "name": "Lab 7 - Observer",
+      "item": [
+        { "name": "observer/payment-completed", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/observer/payment-completed",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"ORD-O1\",\n  \"amount\": 100,\n  \"paymentType\": \"CREDIT_CARD\"\n}" } } },
+        { "name": "observer/listener-log", "request": { "method": "GET", "url": "{{baseUrl}}/api/labs/observer/listener-log" } }
+      ]
+    },
+    {
+      "name": "Lab 8 - Decorator",
+      "item": [
+        { "name": "decorator/charge", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/decorator/charge",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"ORD-D1\",\n  \"amount\": 100\n}" } } }
+      ]
+    },
+    {
+      "name": "Lab 9 - Singleton",
+      "item": [
+        { "name": "singleton/bad (Request-A, holdMs=2000)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/singleton/bad",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"ORDER-A\",\n  \"amount\": 100.00,\n  \"holdMs\": 2000\n}" } } },
+        { "name": "singleton/bad (Request-B, holdMs=0)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/singleton/bad",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"ORDER-B\",\n  \"amount\": 200.00,\n  \"holdMs\": 0\n}" } } },
+        { "name": "singleton/good (Request-A, holdMs=2000)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/singleton/good",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"ORDER-A\",\n  \"amount\": 100.00,\n  \"holdMs\": 2000\n}" } } },
+        { "name": "singleton/good (Request-B, holdMs=0)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/singleton/good",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"ORDER-B\",\n  \"amount\": 200.00,\n  \"holdMs\": 0\n}" } } }
+      ]
+    }
+  ]
+}
