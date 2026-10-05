@@ -1,0 +1,56 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: concurrency-service
+
+concurrency-lab:
+  # Request body'den okunan task sayıları için üst sınırlar.
+  # Amaç: yanlış bir input'un (örn. taskCount=500000) makineyi kilitlemesini önlemek.
+  # Her sınırın kendi gerekçesi README'de "Güvenlik Sınırları" bölümünde açıklanmıştır.
+  safety:
+    max-task-count: 500
+    max-fixed-pool-task-count: 1000
+    max-fixed-pool-size: 50
+    max-bounded-task-count: 200
+    max-virtual-task-count: 5000
+    max-downstream-request-count: 500
+    max-cpu-bound-task-count: 32
+    max-cpu-bound-work-units: 5000000
+    max-delay-ms: 5000
+
+  # Lab 1/2/3/4'te ortak kullanılan "generic blocking downstream call" (CustomerCheckSimulator) gecikmesi.
+  # Platform/Fixed/Bounded/Virtual karşılaştırmasının adil olması için aynı simulator, aynı delayMs kullanılır.
+  customer-check:
+    default-delay-ms: 300
+
+  bounded-executor:
+    # Bilinçli olarak küçük tutuldu: 200 task'lık bir yükle queue'yu gerçekten doldurup
+    # rejection'ı deterministik şekilde gözlemleyebilmek için.
+    core-pool-size: 5
+    max-pool-size: 10
+    queue-capacity: 10
+
+  provider:
+    fraud:
+      # Business kuralı: external fraud provider aynı anda en fazla bu kadar concurrent request kabul eder.
+      max-concurrency: 10
+      delay-ms: 250
+
+  pricing-cache:
+    read-delay-ms: 30
+    reload-delay-ms: 400
+
+  stamped-lock-demo:
+    # LAB ONLY: optimistic read ile validate() arasındaki pencereyi deterministik şekilde genişletir.
+    window-delay-ms: 80
+
+logging:
+  pattern:
+    # Thread adını kısaltmadan gösteriyoruz; Platform/Virtual Thread farkını okumak için en kritik bilgi.
+    console: "%d{HH:mm:ss.SSS} %-5level [%-28thread] %-28.28logger{0} : %msg%n"
+  level:
+    root: INFO
+    # Bounded executor rejection / CAS benzeri retry detaylarını görmek için DEBUG yapın:
+    # com.javalabs.concurrency: DEBUG

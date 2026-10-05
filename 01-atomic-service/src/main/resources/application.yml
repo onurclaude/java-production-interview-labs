@@ -1,0 +1,37 @@
+server:
+  port: 8086
+
+spring:
+  application:
+    name: atomic-service
+
+atomic-lab:
+  # Business kuralı: external payment provider aynı anda en fazla bu kadar aktif request kabul eder.
+  # Hem uygulamanın uyguladığı limit hem de simulator'ın "kapasite" referansı bu değerdir.
+  provider-concurrency-limit: 20
+
+  # LAB ONLY: check ile act arasına konan yapay bekleme.
+  # Production kodu değildir; race condition'ı deterministik şekilde görünür hale getirmek içindir.
+  # 0 yapıp aynı yükü tekrar gönderirseniz race'in "şansa bağlı" hale geldiğini görebilirsiniz.
+  race-window: 50ms
+
+  # LAB ONLY: CAS döngüsünde get() ile compareAndSet() arasına konan yapay bekleme.
+  # CAS retry/contention'ı gözlemlenebilir yapar. Doğruluğu bozmaz; sadece retry sayısını büyütür.
+  cas-race-window: 5ms
+
+  provider:
+    # LOCAL  -> provider simulator aynı JVM içinde çalışır (tek instance lab'ları).
+    # REMOTE -> provider simulator başka bir instance'ta çalışır (multi-instance lab'ı, bkz. application-remote-provider.yml).
+    mode: LOCAL
+    min-delay: 500ms
+    max-delay: 1000ms
+    remote-base-url: http://localhost:8090
+
+logging:
+  pattern:
+    # Thread adını kısaltmadan gösteriyoruz; concurrency davranışını okumak için en kritik bilgi.
+    console: "%d{HH:mm:ss.SSS} %-5level [%-21thread] %-24.24logger{0} : %msg%n"
+  level:
+    root: INFO
+    # Her CAS failure'ı tek tek görmek için DEBUG yapın (yük altında çok log üretir):
+    # com.javalabs.atomic.lab.CasSlotLimiter: DEBUG

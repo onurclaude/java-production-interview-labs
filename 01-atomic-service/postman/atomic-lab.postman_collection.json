@@ -1,0 +1,54 @@
+{
+  "info": {
+    "name": "01 - Atomic Primitives Lab",
+    "description": "01-atomic-service endpoint'leri. Önce Reset, sonra lab endpoint'i, sonra Stats. Concurrent yük için scripts/ altındaki script'leri kullanın.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8081" },
+    { "key": "providerUrl", "value": "http://localhost:8090" }
+  ],
+  "item": [
+    {
+      "name": "Admin",
+      "item": [
+        { "name": "Stats", "request": { "method": "GET", "url": "{{baseUrl}}/api/labs/atomic/stats" } },
+        { "name": "Reset (LAB ONLY)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/atomic/reset" } }
+      ]
+    },
+    {
+      "name": "Lab 1 - Plain int (BAD)",
+      "item": [
+        { "name": "plain-int", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/atomic/plain-int" } }
+      ]
+    },
+    {
+      "name": "Lab 2 - AtomicInteger check-then-act (BAD)",
+      "item": [
+        { "name": "check-then-act", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/atomic/check-then-act" } }
+      ]
+    },
+    {
+      "name": "Lab 3 - CAS (GOOD, JVM-local)",
+      "item": [
+        { "name": "cas", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/atomic/cas" } }
+      ]
+    },
+    {
+      "name": "Lab 4 - Counter leak",
+      "item": [
+        { "name": "leak/bad fail=true (slot sızdırır)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/atomic/leak/bad?fail=true" } },
+        { "name": "leak/bad (sağlıklı request)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/atomic/leak/bad" } },
+        { "name": "leak/good fail=true", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/atomic/leak/good?fail=true" } },
+        { "name": "leak/good (sağlıklı request)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/atomic/leak/good" } }
+      ]
+    },
+    {
+      "name": "Multi-instance - Shared provider",
+      "item": [
+        { "name": "Provider stats", "request": { "method": "GET", "url": "{{providerUrl}}/api/simulated-provider/stats" } },
+        { "name": "Provider reset (LAB ONLY)", "request": { "method": "POST", "url": "{{providerUrl}}/api/simulated-provider/reset" } }
+      ]
+    }
+  ]
+}

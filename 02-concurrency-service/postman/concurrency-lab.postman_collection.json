@@ -1,0 +1,151 @@
+{
+  "info": {
+    "name": "02 - Concurrency & Thread Management Lab",
+    "description": "02-concurrency-service endpoint'leri. Her lab bağımsız çalışır; GLOBAL STATS/RESET ile gözlemleyip tekrar üretilebilir şekilde sıfırlayabilirsiniz. Concurrent HTTP yük için scripts/ altındaki script'leri kullanın.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8082" }
+  ],
+  "item": [
+    {
+      "name": "Admin",
+      "item": [
+        { "name": "Global stats", "request": { "method": "GET", "url": "{{baseUrl}}/api/labs/concurrency/stats" } },
+        { "name": "Global reset (LAB ONLY)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/concurrency/reset" } }
+      ]
+    },
+    {
+      "name": "Lab 1 - Platform Thread",
+      "item": [
+        { "name": "platform", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/threads/platform",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"taskCount\": 50,\n  \"delayMs\": 300\n}" } } }
+      ]
+    },
+    {
+      "name": "Lab 2 - FixedThreadPool",
+      "item": [
+        { "name": "executor/fixed", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/executor/fixed",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"taskCount\": 100,\n  \"poolSize\": 10,\n  \"delayMs\": 500\n}" } } }
+      ]
+    },
+    {
+      "name": "Lab 3 - Bounded Executor + Rejection",
+      "item": [
+        { "name": "executor/bounded (saturates queue -> rejections)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/executor/bounded",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"taskCount\": 40,\n  \"delayMs\": 300\n}" } } }
+      ]
+    },
+    {
+      "name": "Lab 4 - Virtual Thread",
+      "item": [
+        { "name": "virtual", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/threads/virtual",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"taskCount\": 500,\n  \"delayMs\": 300\n}" } } }
+      ]
+    },
+    {
+      "name": "CPU-bound vs I-O-bound",
+      "item": [
+        { "name": "cpu-bound PLATFORM_POOL", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/threads/cpu-bound",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"taskCount\": 32,\n  \"workUnits\": 5000000,\n  \"mode\": \"PLATFORM_POOL\"\n}" } } },
+        { "name": "cpu-bound VIRTUAL", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/threads/cpu-bound",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"taskCount\": 32,\n  \"workUnits\": 5000000,\n  \"mode\": \"VIRTUAL\"\n}" } } }
+      ]
+    },
+    {
+      "name": "Lab 5 - Virtual Downstream (BAD)",
+      "item": [
+        { "name": "virtual/downstream/bad", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/virtual/downstream/bad",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"requestCount\": 100\n}" } } }
+      ]
+    },
+    {
+      "name": "Lab 6 - Semaphore Bulkhead (GOOD)",
+      "item": [
+        { "name": "virtual/downstream/good (acquire, no timeout)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/virtual/downstream/good",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"requestCount\": 100,\n  \"useTimeout\": false,\n  \"timeoutMs\": 0\n}" } } },
+        { "name": "virtual/downstream/good (tryAcquire with timeout)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/virtual/downstream/good",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"requestCount\": 100,\n  \"useTimeout\": true,\n  \"timeoutMs\": 500\n}" } } }
+      ]
+    },
+    {
+      "name": "Lab 7 - CountDownLatch",
+      "item": [
+        { "name": "coordination/latch (GOOD)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/coordination/latch",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"customerCheckDelayMs\": 100,\n  \"fraudCheckDelayMs\": 150,\n  \"pricingCheckDelayMs\": 80,\n  \"simulateCrashWithoutFinally\": false,\n  \"awaitTimeoutMs\": 5000\n}" } } },
+        { "name": "coordination/latch (BAD - crash without finally -> timeout)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/coordination/latch",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"customerCheckDelayMs\": 100,\n  \"fraudCheckDelayMs\": 150,\n  \"pricingCheckDelayMs\": 80,\n  \"simulateCrashWithoutFinally\": true,\n  \"awaitTimeoutMs\": 1500\n}" } } }
+      ]
+    },
+    {
+      "name": "Lab 8 - CyclicBarrier",
+      "item": [
+        { "name": "coordination/barrier (2 rounds - reusable)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/coordination/barrier",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"workerDelaysMs\": [100, 300, 200],\n  \"rounds\": 2\n}" } } }
+      ]
+    },
+    {
+      "name": "Lab 9 - Phaser",
+      "item": [
+        { "name": "coordination/phaser (validate/enrich/finalize)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/coordination/phaser",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"validateDelayMs\": 80,\n  \"enrichDelayMs\": 60,\n  \"finalizeDelayMs\": 50\n}" } } }
+      ]
+    },
+    {
+      "name": "Lab 10 - ReadWriteLock",
+      "item": [
+        { "name": "locks/read-write/price/P1", "request": { "method": "GET", "url": "{{baseUrl}}/api/labs/locks/read-write/price/P1" } },
+        { "name": "locks/read-write/reload", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/locks/read-write/reload" } },
+        { "name": "locks/read-write/stats", "request": { "method": "GET", "url": "{{baseUrl}}/api/labs/locks/read-write/stats" } }
+      ]
+    },
+    {
+      "name": "Lab 11 - StampedLock",
+      "item": [
+        { "name": "locks/stamped/price/P1", "request": { "method": "GET", "url": "{{baseUrl}}/api/labs/locks/stamped/price/P1" } },
+        { "name": "locks/stamped/reload", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/locks/stamped/reload" } },
+        { "name": "locks/stamped/demo/fallback/P1 (deterministic fallback)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/locks/stamped/demo/fallback/P1" } },
+        { "name": "locks/stamped/stats", "request": { "method": "GET", "url": "{{baseUrl}}/api/labs/locks/stamped/stats" } }
+      ]
+    },
+    {
+      "name": "Lab 12 - ABA & AtomicStampedReference",
+      "item": [
+        { "name": "aba/bad", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/aba/bad" } },
+        { "name": "aba/stamped", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/aba/stamped" } }
+      ]
+    },
+    {
+      "name": "Lab 13 - CopyOnWriteArrayList",
+      "item": [
+        { "name": "cow/listeners (list)", "request": { "method": "GET", "url": "{{baseUrl}}/api/labs/cow/listeners" } },
+        { "name": "cow/listeners/{name} (add)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/cow/listeners/AuditListener" } },
+        { "name": "cow/listeners/{name} (remove)", "request": { "method": "DELETE", "url": "{{baseUrl}}/api/labs/cow/listeners/AuditListener" } },
+        { "name": "cow/listeners/demo/concurrent-iteration", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/cow/listeners/demo/concurrent-iteration",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"nameToAddDuringIteration\": \"AuditListener\"\n}" } } }
+      ]
+    },
+    {
+      "name": "Lab 14 - CopyOnWriteArraySet",
+      "item": [
+        { "name": "cow/feature-rules (list)", "request": { "method": "GET", "url": "{{baseUrl}}/api/labs/cow/feature-rules" } },
+        { "name": "cow/feature-rules/{name} (add - duplicate ignored)", "request": { "method": "POST", "url": "{{baseUrl}}/api/labs/cow/feature-rules/FRAUD_STRICT_MODE" } },
+        { "name": "cow/feature-rules/{name} (remove)", "request": { "method": "DELETE", "url": "{{baseUrl}}/api/labs/cow/feature-rules/PRICING_V2" } }
+      ]
+    }
+  ]
+}

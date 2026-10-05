@@ -1,0 +1,8 @@
+# Multi-instance lab'ı için profil.
+# Bu profil ile çalışan instance'lar provider'ı kendi JVM'lerinde değil,
+# ortak bir "external provider" instance'ında (varsayılan 8090) çağırır.
+# Böylece 3 instance'ın provider'a TOPLAMDA kaç concurrent request gönderdiği tek yerden gözlemlenir.
+atomic-lab:
+  provider:
+    mode: REMOTE
+    remote-base-url: http://localhost:8090
