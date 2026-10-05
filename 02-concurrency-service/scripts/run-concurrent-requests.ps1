@@ -7,8 +7,8 @@
   StampedLock) gibi "many HTTP client isteği aynı anda cache'e çarpsın" senaryoları için kullanışlıdır.
 
 .EXAMPLE
-  .\run-concurrent-requests.ps1 -Url http://localhost:8082/api/labs/locks/read-write/price/P1 -Method GET -Requests 30 -Concurrency 30
-  .\run-concurrent-requests.ps1 -Url http://localhost:8082/api/labs/aba/bad -Method POST -Requests 10 -Concurrency 10
+  .\run-concurrent-requests.ps1 -Url http://localhost:8086/api/labs/locks/read-write/price/P1 -Method GET -Requests 30 -Concurrency 30
+  .\run-concurrent-requests.ps1 -Url http://localhost:8086/api/labs/aba/bad -Method POST -Requests 10 -Concurrency 10
 
 .NOTES
   Request'ler "concurrency" büyüklüğünde dalgalar halinde gönderilir.

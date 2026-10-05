@@ -4,7 +4,7 @@ Business context: **Order Processing Service**. Bu servis Java concurrency API'l
 öğretmez. Her lab şu soruyu cevaplar: *"Gerçek bir Spring Boot backend'de bu aracı hangi problem için,
 neden kullanırım — ve neyin alternatifi DEĞİLDİR?"*
 
-Port: **8082** · Java 21 · Spring Boot · Maven · PostgreSQL/Kafka/Redis **YOK** · Unit test **YOK**.
+Port: **8086** · Java 21 · Spring Boot · Maven · PostgreSQL/Kafka/Redis **YOK** · Unit test **YOK**.
 
 ---
 
@@ -47,7 +47,7 @@ cd 02-concurrency-service
 ./mvnw spring-boot:run
 ```
 
-Uygulama `http://localhost:8082` üzerinde ayağa kalkar. Postman koleksiyonu: `postman/concurrency-lab.postman_collection.json`.
+Uygulama `http://localhost:8086` üzerinde ayağa kalkar. Postman koleksiyonu: `postman/concurrency-lab.postman_collection.json`.
 Concurrent HTTP yük için: `scripts/run-concurrent-requests.sh` / `.ps1`.
 
 ### Global stats / reset
@@ -118,6 +118,15 @@ kullandım, production-safe oldum" YANLIŞTIR.** Bkz. Lab 3.
 **backpressure**'dır: "şu an kaldıramıyorum" sinyalini erken ve açıkça vermek, sessizce kuyruğa atıp
 sistemi yavaşça batırmaktan çok daha iyidir.
 
+**Somut senaryo (core=5, max=10, queue=10, 40 iş):**
+
+```
+İş 1-5    -> core worker'lar hemen çalışır           (aktif: 5)
+İş 6-10   -> core dolu, yeni worker açılır (max'a kadar) (aktif: 10)
+İş 11-20  -> worker'lar dolu (10/10) -> queue'ya girer   (queue: 10/10)
+İş 21-40  -> worker'lar VE queue dolu -> HEMEN REDDEDİLİR (rejected: 20)
+```
+
 **Nasıl reproduce ederim?** `POST /api/labs/executor/bounded` body: `{"taskCount":40,"delayMs":300}`
 (core=5, max=10, queue=10 — `application.yml`'den, request'ten DEĞİL).
 
@@ -164,6 +173,17 @@ kontrolsüz çağırırsa ne olur?
 **Neden bu primitive (ya da neden YOK)?** Bu lab BİLİNÇLİ OLARAK hiçbir gate/limit KULLANMAZ — tam olarak
 bu eksikliği göstermek için var.
 
+**Somut senaryo (benzetme):** Uygulamamızın 500 kişilik bir otobüsü var (500 Virtual Thread rahatça
+açılabilir). Gittiğimiz yerin kapısından aynı anda sadece 10 kişi girebiliyor (`maxConcurrency=10`).
+Otobüs 500 kişi taşıyor diye hepsini birden kapıya göndersek:
+
+```
+Thread-1  ...  Thread-10  -> kapıdan geçer (inFlight 1..10)      -> kabul
+Thread-11 ...  Thread-100 -> kapı zaten 10 kişiyle dolu           -> ProviderOverloadedException
+```
+
+Otobüsün 500 kişi taşıyabilmesi, kapının da 500 kişiyi aynı anda kabul edebileceği anlamına GELMEZ.
+
 **Nasıl reproduce ederim?** `POST /api/labs/virtual/downstream/bad` body: `{"requestCount":100}`.
 
 **Ne gözlemlemeliyim?** Gerçek test sonucu: `accepted=10, overloadedOrRejected=90,
@@ -186,6 +206,15 @@ downstream'i korumak.
 `tryAcquire → provider.check() → finally release` deseni zorunludur: `release()` finally DIŞINDA olsaydı,
 provider exception fırlattığında (örn. simulated failure) permit asla geri verilmez ve Semaphore zamanla
 "sahte doluluğa" kilitlenirdi (gerçek kapasite varken kabul etmemeye başlardı) — Semaphore'un en klasik bug'ı.
+
+**Somut senaryo (benzetme):** Kapının önüne, kapasitesi kadar (10) GİRİŞ KARTI olan bir dağıtıcı koyuyoruz:
+
+```
+Request 1-10    -> kart ister -> kart VAR -> alır -> kapıdan geçer -> işi bitince kartı GERİ VERİR
+Request 11      -> kart ister -> kart YOK -> BEKLER (acquire) ya da belirli süre bekleyip vazgeçer (tryAcquire+timeout)
+                   ... Request 3 kartını geri verince ...
+Request 11      -> şimdi kart VAR -> alır -> kapıdan geçer
+```
 
 **Nasıl reproduce ederim?** `POST /api/labs/virtual/downstream/good` body:
 `{"requestCount":100,"useTimeout":false,"timeoutMs":0}` (veya `useTimeout:true,timeoutMs:500`).
@@ -221,6 +250,20 @@ hepsinin tamamlanmasını beklememiz gerekiyor.
 **Neden bu primitive?** `CountDownLatch(3)` — "N bağımsız olayın tamamlanmasını bekleyen 1 taraf" modelidir.
 Her worker `try { ... } finally { latch.countDown(); }` ile kendi tamamlanmasını bildirir.
 
+**Somut senaryo (adım adım):**
+
+```
+latch = new CountDownLatch(3)                         // count = 3
+Orchestrator: latch.await()                            // BLOKE OLUR
+
+CustomerCheck (100ms) biter -> countDown()              // count = 2  (await hâlâ bloke)
+PricingCheck  (80ms)  biter -> countDown()               // count = 1  (await hâlâ bloke)
+FraudCheck    (150ms) biter -> countDown()                // count = 0  -> await() DÖNER, orchestrator devam eder
+```
+
+Üçünün HANGİ SIRAYLA bittiği önemli değildir (burada Pricing, Customer'dan önce bitti) — önemli olan
+ÜÇÜNÜN DE bitmiş olmasıdır.
+
 **Nasıl reproduce ederim?** `POST /api/labs/coordination/latch` body:
 `{"customerCheckDelayMs":100,"fraudCheckDelayMs":150,"pricingCheckDelayMs":80,"simulateCrashWithoutFinally":false,"awaitTimeoutMs":5000}`.
 
@@ -245,6 +288,17 @@ worker crash ettiğinde request thread'ini sonsuza kadar asılı bırakır.
 
 **Neden bu primitive?** `CyclicBarrier(3, barrierAction)` — "birbirini bekleyen N eşit taraf" modelidir.
 CountDownLatch'ten farkı: latch'te 1 taraf N olayı bekler; barrier'da N taraf BİRBİRİNİ bekler.
+
+**Somut senaryo (adım adım, workerDelaysMs=[100,300,200]):**
+
+```
+Worker-A (100ms) phase1 biter -> barrier.await() -> BEKLER      (B, C henüz gelmedi)
+Worker-C (200ms) phase1 biter -> barrier.await() -> BEKLER      (B henüz gelmedi, A hâlâ bekliyor)
+Worker-B (300ms) phase1 biter -> barrier.await() -> SON PARTİ   -> BARRIER AÇILIR
+-> A, B, C ÜÇÜ BİRDEN (300ms anında) phase 2'ye başlar
+```
+
+A en erken geldi (100ms) ama en geç gelen B'yi (300ms) bekledi — barrier hiçbirini erken bırakmaz.
 
 **Nasıl reproduce ederim?** `POST /api/labs/coordination/barrier` body:
 `{"workerDelaysMs":[100,300,200],"rounds":2}`.
@@ -277,7 +331,7 @@ yapamadığı tam olarak budur.
 phase 0'ın bittiğini `awaitAdvance(0)` ile bekler → worker-3'ü `register()` ile DİNAMİK OLARAK ekler →
 worker-0/1/2 enrich'e girer (worker-3 de enrich'e katılır) → worker-0 VE worker-3 enrich sonrası
 `arriveAndDeregister()` ile AYRILIR → finalize'ı SADECE worker-1 ve worker-2 tamamlar. Sıra HER ZAMAN
-korunur (LAB ONLY `CountDownLatch` ile deterministik hale getirildi — section 40: race şansa bırakılmaz).
+korunur (LAB ONLY `CountDownLatch` ile deterministik hale getirildi, race şansa bırakılmadı).
 
 **Production'da neye dikkat etmeliyim?** **Dürüst not:** gerçek bir Spring microservice'te Phaser GÜNLÜK
 kullanılan bir araç DEĞİLDİR. Parti sayısı sabitse `CyclicBarrier`/`CountDownLatch` zaten yeterlidir ve çok
@@ -331,12 +385,28 @@ ucuz bir yol var mı?
 `validate(stamp)` ile "okuma sırasında araya write girdi mi" kontrol edilir; girmediyse veri GEÇERLİDİR
 (lock'suz, çok ucuz); girdiyse `readLock()` ile GÜVENLİ fallback yapılır.
 
+**Somut senaryo (adım adım — deterministik fallback demosu):**
+
+```
+Reader: stamp = tryOptimisticRead()        // LOCK YOK, sadece "versiyon numarası" alındı
+Reader: price = map.get("P1")  -> 19.90     // veri lock'suz okundu
+
+           *** TAM BU SIRADA ***
+Writer:  reload() -> writeLock() -> prices'ı +1.00 artırır -> version 0 -> 1 -> unlockWrite()
+
+Reader: lock.validate(stamp)  -> false      // "ben okurken bir yazma oldu!"
+Reader: readLock() ile TEKRAR oku -> 20.90  // GÜVENLİ fallback
+```
+
+Gerçek test sonucu: `optimisticallyReadValue=19.90, optimisticStillValidAfterWindow=false,
+fallbackReadValue=20.90` — optimistic okuma "şüpheli" çıktı ve fallback doğru değeri getirdi.
+
 **Nasıl reproduce ederim?** `GET /api/labs/locks/stamped/price/P1` (normal, genelde optimistic başarı),
 `POST /api/labs/locks/stamped/demo/fallback/P1` (DETERMİNİSTİK fallback demosu), `GET .../stamped/stats`.
 
 **Ne gözlemlemeliyim?** Gerçek test sonucu — normal okuma: `optimisticReadSucceeded=true`. Deterministik
 demo: `optimisticStillValidAfterWindow=false`, `fallbackReadValue` dolu (optimistic read ile validate()
-arasına LAB ONLY bir pencere açılıp arada GERÇEK bir reload tetiklenir — race şansa bırakılmaz, section 40).
+arasına LAB ONLY bir pencere açılıp arada GERÇEK bir reload tetiklenir — race şansa bırakılmaz).
 `stats`: `optimisticReadAttempts=2, optimisticReadSuccess=1, optimisticReadFallback=1`.
 
 **Production'da neye dikkat etmeliyim?** StampedLock HER ZAMAN ReadWriteLock yerine kullanılmamalı:
@@ -358,6 +428,23 @@ okunuyor; bu arada başka bir thread A→B→A şeklinde DEĞİŞTİRİP GERİ D
 (aynı static instance) geri döndüğü için "hiç değişmedi" sonucuna varır (BAD). `AtomicStampedReference`
 her değişiklikte artan bir STAMP (versiyon) taşır; A→B→A iki stamp artışı yapar, bu yüzden
 "value aynı AMA stamp farklı" tespiti ile aradaki değişiklik YAKALANIR (GOOD).
+
+**Somut senaryo (adım adım):**
+
+```
+                    BAD (AtomicReference)              GOOD (AtomicStampedReference)
+                    ----------------------              -----------------------------
+Thread-A okur:      state.get() -> Provider-A           ref.get(stamp) -> Provider-A, stamp=0
+Thread-B değiştirir: state.set(Provider-B)               ref.set(Provider-B, stamp=1)
+Thread-B geri alır:  state.set(Provider-A)                ref.set(Provider-A, stamp=2)
+Thread-A tekrar okur: state.get() -> Provider-A          ref.get(stamp) -> Provider-A, stamp=2
+
+Sonuç:              before == after -> "DEĞİŞMEDİ"       before == after AMA stampBefore(0) != stampAfter(2)
+                     (YANLIŞ: arada B'ye gidip geldi!)    -> "ARADA DEĞİŞTİ" (DOĞRU tespit)
+```
+
+Gerçek test sonucu — BAD: `referenceUnchanged=true, bugDemonstrated=true`. GOOD:
+`stampBefore=0, stampAfter=2, reallyUnchanged=false, bugPrevented=true`.
 
 **Nasıl reproduce ederim?** `POST /api/labs/aba/bad`, `POST /api/labs/aba/stamped` (her ikisi de
 deterministik: flip sırası `CountDownLatch` ile garanti edilir, şansa bırakılmaz).
@@ -649,4 +736,4 @@ kullanılır.
   endpoint'inde görünmezler — bu bilinçli bir tasarım kararıdır (section 20: "God Object oluşturma").
 - `demoForcedFallback` ve ABA demo endpoint'leri LAB ONLY deterministik koordinasyon (CountDownLatch/
   join) kullanır; bu, StampedLock/AtomicStampedReference'ın KENDİSİNİN çözümü değildir, sadece lab'ı
-  tekrar üretilebilir kılan bir zamanlama garantisidir (section 40).
+  tekrar üretilebilir kılan bir zamanlama garantisidir.

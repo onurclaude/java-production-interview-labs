@@ -18,11 +18,22 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Lab 5 — BAD: Virtual Thread + kontrolsüz downstream çağrısı.
  *
- * <p>Bu lab'ın tek amacı şu yanılgıyı ÇÖKERTMEKTIR: "500 Virtual Thread oluşturabiliyorum, demek ki
- * provider'a 500 concurrent request gönderebilirim." Virtual Thread, JVM içindeki TASK EXECUTION
- * modelini ölçekler (çok task'ı az OS thread ile ifade eder) — provider'ın kapasitesiyle hiçbir ilgisi
- * yoktur. requestCount, FraudProviderSimulator'ın maxConcurrency'sini (varsayılan 10) aştığında provider
- * gerçekten ProviderOverloadedException fırlatır; bu exception burada YUTULMAZ, sayılır.
+ * <p>PROBLEM: Uygulamamızın 500 kişilik bir otobüsü olduğunu düşünün (500 Virtual Thread rahatlıkla
+ * oluşturulabilir). Ama gittiğimiz yerin (fraud provider) kapısından aynı anda sadece 10 kişi girebiliyor
+ * (bkz. {@code concurrency-lab.provider.fraud.max-concurrency}). Otobüsün 500 kişi taşıyabilmesi,
+ * kapının da 500 kişiyi aynı anda kabul edebileceği anlamına GELMEZ.
+ *
+ * <p>BU SINIFTA O KAPI YOK: her istek kendi Virtual Thread'inde, ARADA HİÇBİR SIRA/KONTROL OLMADAN
+ * doğrudan provider'ın kapısına dayanıyor. 500 istek varsa 500'ü de AYNI ANDA kapıya varmaya çalışır.
+ *
+ * <p>SONUÇ: {@link FraudProviderSimulator}, aynı anda içeride (inFlight) olan istek sayısı 10'u
+ * geçtiği an {@link ProviderOverloadedException} fırlatır — bu gerçek bir hatadır, burada yutulmaz,
+ * sayılır ({@code overloaded} sayacı). "500 Virtual Thread açabiliyorum" ile "provider 500'ü kaldırır"
+ * karıştırılınca production'da ortaya çıkan tam olarak budur: provider'dan art arda 429/503/overload
+ * hataları gelmeye başlar, hem de uygulama tarafında HİÇBİR hata/exception görünmüyormuş gibi dursa bile
+ * (çünkü Virtual Thread'leri açmak başarıyla çalışır — başarısız olan, onların HEPSİNİN aynı anda
+ * provider'a ulaşmasıdır). Karşılaştırma için: {@link com.javalabs.concurrency.downstream.SemaphoreBulkheadLab}
+ * aynı senaryoyu kapının önüne bir SIRA (Semaphore) koyarak çözer.
  */
 @Service
 public class UncontrolledDownstreamLab {
@@ -48,9 +59,24 @@ public class UncontrolledDownstreamLab {
 
         long startNanos = System.nanoTime();
         List<Future<?>> futures = new ArrayList<>(requestCount);
-        // Her request kendi Virtual Thread'inde, ARADA HİÇBİR GATE/LİMİT OLMADAN provider'ı çağırır.
-        // Bu BİLİNÇLİ olarak kötü bir implementasyondur (BAD): Virtual Thread oluşturmak ucuz olduğu için
-        // "oluşturabiliyorum" ile "downstream'in kaldırabileceği" karıştırılmıştır.
+        /*
+         * requestCount=100, providerMaxConcurrency=10 ile ne olur?
+         *
+         * Burada 100 Virtual Thread AYNI ANDA başlatılıyor ve hiçbiri diğerini beklemiyor. Provider'ın
+         * iç sayacı (FraudProviderSimulator.inFlight) kabaca şöyle ilerler:
+         *
+         *   Thread-1  -> inFlight=1    (10'un altında, kabul)
+         *   Thread-2  -> inFlight=2    (kabul)
+         *   ...
+         *   Thread-10 -> inFlight=10   (son izin verilen)
+         *   Thread-11 -> inFlight=11   (LİMİT AŞILDI -> ProviderOverloadedException)
+         *   Thread-12 -> inFlight=12   (AŞILDI -> exception)
+         *   ...
+         *
+         * Gerçek test sonucu (requestCount=100): accepted=10, overloaded=90,
+         * maxObservedConcurrency=100. Virtual Thread'lerin "ucuz" olması, hepsinin aynı anda
+         * kapıya dayanmasını ENGELLEMEZ — tam tersine, kolaylaştırır.
+         */
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
             for (int i = 0; i < requestCount; i++) {
                 int orderId = i;

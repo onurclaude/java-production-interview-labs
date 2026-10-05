@@ -6,8 +6,8 @@
 #   ./run-concurrent-requests.sh <url> <method GET|POST> <requests> <concurrency>
 #
 # Örnekler:
-#   ./run-concurrent-requests.sh http://localhost:8082/api/labs/locks/read-write/price/P1 GET 30 30
-#   ./run-concurrent-requests.sh http://localhost:8082/api/labs/aba/bad POST 10 10
+#   ./run-concurrent-requests.sh http://localhost:8086/api/labs/locks/read-write/price/P1 GET 30 30
+#   ./run-concurrent-requests.sh http://localhost:8086/api/labs/aba/bad POST 10 10
 
 set -euo pipefail
 

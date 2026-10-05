@@ -12,15 +12,26 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * Lab 12 — BAD: plain AtomicReference ile ABA problemi.
  *
- * <p>Gerçek production bug'ı: bir servis "routing state değişti mi?" diye SADECE before/after referansını
- * karşılaştırarak karar verir (örn. "değişmediyse, cache'lenmiş bir bağlantıyı/kararı yeniden kullanmak
- * güvenlidir" gibi bir optimizasyon). A -> B -> A şeklinde arada GERÇEK bir değişiklik olduğunda, bu
- * karşılaştırma "değişmedi" der — çünkü son değer, ilk değerle AYNI paylaşılan instance'a geri döner.
- * Oysa o pencerede trafik gerçekten B'ye yönlenmişti; "hiç değişmedi" varsayımına dayanan her karar
- * (sayaç, cache, circuit-breaker state'i vb.) sessizce YANLIŞ olur.
+ * <p>PROBLEM — gerçek bir production bug'ı şöyle doğar: bir servis "routing state'i ben bakmadan önce
+ * değişti mi?" sorusunu SADECE before/after REFERANSINI karşılaştırarak cevaplar (örn. "değişmediyse,
+ * elimdeki cache'lenmiş bağlantıyı/kararı yeniden kullanmak güvenlidir" gibi bir optimizasyon).
  *
- * <p>Lab deterministiktir: flip sırası (A->B->A) şansa bırakılmaz, CountDownLatch ile garanti edilir
- * (section 40 — race'i şansa bırakma).
+ * <p>Somut zaman çizelgesi (Thread-A karar verici, Thread-B arka planda routing'i değiştiren thread):
+ * <pre>
+ *   Thread-A: state.get() -> Provider-A        ("şu an A'dayız" diye not aldı)
+ *   Thread-B: state.set(Provider-B)             (trafik B'ye kaydı)
+ *   Thread-B: state.set(Provider-A)              (trafik GERİ A'ya döndü)
+ *   Thread-A: state.get() -> Provider-A        ("hâlâ A! hiçbir şey değişmemiş" diye düşünüyor)
+ * </pre>
+ * Thread-A'nın gördüğü before/after AYNI REFERANSTIR (her ikisi de aynı paylaşılan {@code PROVIDER_A}
+ * nesnesi) — ama arada GERÇEKTEN B'ye gidip geldik. Thread-A'nın "hiçbir şey değişmedi" varsayımına
+ * dayanan her kararı (bir sayaç, bir cache, bir circuit-breaker durumu) sessizce YANLIŞ olur, çünkü o
+ * pencerede trafiğin bir kısmı gerçekten B'ye gitmiş olabilir.
+ *
+ * <p>DİKKAT: Bu lab deterministiktir — A->B->A sırası şansa bırakılmaz, {@code CountDownLatch} ile
+ * Thread-A'nın "before" okumasını bitirmesi ile Thread-B'nin flip'lere başlaması arasına kesin bir sıra
+ * konur (aksi halde flip'ler bazen "before" okumasından ÖNCE bitebilir ve lab her çalıştırmada farklı
+ * sonuç verirdi).
  */
 @Service
 public class AbaBadRoutingService {

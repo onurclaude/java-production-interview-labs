@@ -13,14 +13,32 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Lab 7 — CountDownLatch.
  *
- * <p>Gerçek senaryo: bir order'ı işlemeye devam etmeden önce üç BAĞIMSIZ kontrolün (Customer, Fraud,
- * Pricing) hepsinin bitmesini beklememiz gerekiyor. Bu kontroller birbirinden habersiz, paralel
- * çalışabilir — CountDownLatch(3) tam olarak bu "N bağımsız olayın tamamlanmasını bekle" problemini çözer.
+ * <p>PROBLEM: Bir order'ı işlemeye devam etmeden önce üç BAĞIMSIZ kontrolün (Customer, Fraud, Pricing)
+ * hepsinin bitmesini beklememiz gerekiyor. Bunlar birbirinden habersiz, paralel çalışabilir (biri DB'ye
+ * sorar, biri external bir fraud servisine gider, biri pricing cache'ine bakar) ama sipariş hiçbiri
+ * bitmeden devam EDEMEZ.
  *
- * <p>CountDownLatch ONE-SHOT'tur: count sıfıra indikten sonra RESET EDİLEMEZ. Yeniden kullanmak isterseniz
- * (örn. bir sonraki order için) yeni bir CountDownLatch oluşturmanız gerekir — bu yüzden her çağrı kendi
- * latch'ini yaratır. Bunu CyclicBarrier ile karşılaştırın (Lab 8): o, aynı instance üzerinde tekrar tekrar
- * kullanılabilir (reusable).
+ * <p>ÇÖZÜM: {@code CountDownLatch(3)} bir geri sayım sayacıdır. 3 worker paralel başlar, her biri işini
+ * bitirdiğinde {@code countDown()} çağırır:
+ * <pre>
+ *   latch = new CountDownLatch(3)      // count = 3
+ *   CustomerCheck bitti -> countDown() // count = 2
+ *   FraudCheck bitti    -> countDown() // count = 1
+ *   PricingCheck bitti  -> countDown() // count = 0  -> await() artık BLOKE OLMAZ, orchestrator devam eder
+ * </pre>
+ * Orchestrator thread'i (`latch.await()`) count sıfıra inene kadar bekler — kontrollerin HANGİ SIRAYLA
+ * bittiği önemli değildir, sadece ÜÇÜNÜN DE bitmiş olması önemlidir.
+ *
+ * <p>DİKKAT — {@code countDown()} NEDEN finally İÇİNDE OLMALI? FraudCheck worker'ı beklenmedik bir
+ * exception fırlatırsa ve {@code countDown()} finally dışında bir satırda kalsaydı, o satıra HİÇ
+ * gelinmezdi: count sonsuza kadar 1'de kalırdı ve {@code await()} (timeout yoksa) sipariş işlemeyi
+ * SONSUZA KADAR bekletirdi. Bu sınıfta bilerek bir {@code simulateCrashWithoutFinally} bayrağı var —
+ * açınca bu BAD senaryoyu GERÇEKTEN tetikler ve timeout'la kurtarırız (sonsuz beklemeyi göstermeden).
+ *
+ * <p>DİKKAT — ONE-SHOT: count bir kez sıfıra indikten sonra latch RESET EDİLEMEZ. Bir sonraki order için
+ * yeni bir {@code CountDownLatch} oluşturmanız gerekir (bu yüzden her çağrı kendi latch'ini yaratır).
+ * Bunu Lab 8'deki {@code CyclicBarrier} ile karşılaştırın: o, aynı instance üzerinde TEKRAR TEKRAR
+ * kullanılabilir (reusable) — CountDownLatch bunu yapamaz.
  */
 @Service
 public class CountDownLatchLab {

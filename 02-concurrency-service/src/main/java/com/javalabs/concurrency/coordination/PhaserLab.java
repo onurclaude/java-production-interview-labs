@@ -16,16 +16,29 @@ import java.util.concurrent.TimeUnit;
 /**
  * Lab 9 — Phaser.
  *
- * <p>Senaryo: "Order Import Batch" — validate → enrich → finalize fazlarından geçen bir toplu işlem.
- * CyclicBarrier'dan (Lab 8) farkı: parti sayısı (worker sayısı) SABİT DEĞİL, çalışma sırasında değişebilir.
- * Burada worker-0,1,2 "validate" fazını bitirdiğinde, worker-3 DİNAMİK OLARAK "enrich" fazına katılır
- * (phaser.register()); worker-0 ve worker-3, enrich'ten sonra "finalize"e katılmadan AYRILIR
- * (phaser.arriveAndDeregister()). Bu tam olarak Phaser'ın var olma sebebidir: parti sayısı sabitse
- * CyclicBarrier zaten yeterlidir ve daha basittir.
+ * <p>PROBLEM: "Order Import Batch" — validate → enrich → finalize şeklinde art arda 3 fazdan geçen bir
+ * toplu işlem. CyclicBarrier (Lab 8) bunu kolayca yapardı AMA bir şartla: parti (worker) sayısının HER
+ * FAZDA AYNI kalması gerekir — CyclicBarrier kaç partiyle kurulduysa o sayıyı asla değiştiremez. Burada
+ * ise worker-3, validate bittikten SONRA, sadece enrich fazına katılmak üzere SONRADAN işe giriyor; worker-0
+ * ise enrich'ten sonra finalize'a girmeden işi bırakıyor. Parti sayısı fazdan faza DEĞİŞİYOR — bu
+ * CyclicBarrier'ın kapsamı dışındadır.
  *
- * <p>Dürüst not (README'de de var): gerçek bir Spring microservice'te Phaser GÜNLÜK kullanılan bir araçtır
- * DEĞİLDİR. Parti sayısı sabitse CyclicBarrier/CountDownLatch yeterlidir; parti sayısı dinamik değilse
- * Phaser sadece gereksiz karmaşıklıktır.
+ * <p>ÇÖZÜM: {@code Phaser}, {@code register()} ile çalışma SIRASINDA yeni parti ekleyebilir,
+ * {@code arriveAndDeregister()} ile bir partiyi gelecek fazlardan ÇIKARABİLİR:
+ * <pre>
+ *   Phase 0 (validate): worker-0, worker-1, worker-2 katılır
+ *   -> hepsi bitirince    worker-3 register() ile EKLENİR
+ *   Phase 1 (enrich):   worker-0, worker-1, worker-2, worker-3 katılır
+ *   -> worker-0 VE worker-3 arriveAndDeregister() ile AYRILIR
+ *   Phase 2 (finalize): SADECE worker-1, worker-2 katılır
+ * </pre>
+ * Phaser, her fazda kaç partinin "unarrived" olduğunu kendi içinde takip eder; diğer worker'ların bunu
+ * bilmesine/yönetmesine gerek yoktur.
+ *
+ * <p>DİKKAT — dürüst not: gerçek bir Spring microservice'te Phaser GÜNLÜK kullanılan bir araç DEĞİLDİR.
+ * Parti sayısı sabitse CyclicBarrier/CountDownLatch zaten yeterlidir ve çok daha basittir. Phaser'ı sadece
+ * gerçekten "worker sayısı çalışma sırasında değişiyor" diyebileceğiniz (nadir) senaryolarda düşünün —
+ * aksi halde gereksiz karmaşıklıktır.
  */
 @Service
 public class PhaserLab {
@@ -59,7 +72,7 @@ public class PhaserLab {
         Phaser phaser = new Phaser(3);
         // LAB ONLY koordinasyon: worker-0/1/2'nin "enrich" fazına girmesini, worker-3 register
         // edilene kadar DETERMİNİSTİK şekilde geciktirir. Bu olmadan register() ile diğer worker'ların
-        // arrive çağrısı arasındaki sıra şansa bağlı olurdu (section 40: "Race'i şansa bırakma").
+        // arrive çağrısı arasındaki sıra şansa bağlı olurdu.
         CountDownLatch dynamicWorkerRegisteredGate = new CountDownLatch(1);
 
         long startNanos = System.nanoTime();

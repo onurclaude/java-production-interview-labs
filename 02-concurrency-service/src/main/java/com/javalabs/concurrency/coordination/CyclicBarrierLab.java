@@ -18,12 +18,26 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Lab 8 — CyclicBarrier.
  *
- * <p>Gerçek senaryo: bir batch'in 3 SABİT worker'ı, chunk'ın "phase 1" (validate) işini bitirir ama
- * HİÇBİRİ "phase 2"ye (process) diğerleri hazır olmadan geçmemelidir — peer-to-peer senkronizasyon.
- * CountDownLatch'ten (Lab 7) farkı: latch "N bağımsız olayın tamamlanmasını bekleyen 1 taraf" modelidir;
- * CyclicBarrier "birbirini bekleyen N eşit taraf" modelidir. Ayrıca CyclicBarrier REUSABLE'dır: tüm
- * parties bir kez barrier'a ulaştığında otomatik resetlenir ve aynı instance bir sonraki round için
- * tekrar kullanılabilir (rounds>1 parametresi bunu kanıtlar).
+ * <p>PROBLEM: Bir batch'in 3 SABİT worker'ı var; her biri önce "phase 1"i (chunk validation) bitirir.
+ * Ama hiçbiri "phase 2"ye (chunk processing) DİĞERLERİ HAZIR OLMADAN geçmemelidir — birbirlerini
+ * BEKLEMELERİ gerekir (peer-to-peer senkronizasyon). CountDownLatch (Lab 7) burada işe yaramaz: o
+ * "1 taraf N olayı bekler" modelidir, burada ise "N EŞİT TARAF BİRBİRİNİ bekler".
+ *
+ * <p>ÇÖZÜM: {@code CyclicBarrier(3)}. Somut örnek — Worker-A 100ms'de, Worker-B 300ms'de, Worker-C
+ * 200ms'de phase 1'i bitiriyor olsun:
+ * <pre>
+ *   Worker-A phase1 biter (100ms) -> barrier.await() -> BEKLER (B ve C henüz gelmedi)
+ *   Worker-C phase1 biter (200ms) -> barrier.await() -> BEKLER (B henüz gelmedi, A hâlâ bekliyor)
+ *   Worker-B phase1 biter (300ms) -> barrier.await() -> SON PARTİ GELDİ, barrier AÇILIR
+ *   -> A, B, C ÜÇÜ BİRDEN aynı anda phase 2'ye başlar (hiçbiri 300ms'den önce başlamamıştır)
+ * </pre>
+ * En erken gelen (A, 100ms) en geç gelene (B, 300ms) kadar bekledi — barrier'ın garantisi tam olarak
+ * budur: en yavaş worker neyse, phase 2 o anda başlar, daha erken değil.
+ *
+ * <p>DİKKAT — CountDownLatch ile karıştırmayın: latch "1 taraf N olayı bekler" ve ONE-SHOT'tur; barrier
+ * "N taraf birbirini bekler" ve REUSABLE'dır — tüm partiler barrier'a ulaştığında otomatik resetlenir ve
+ * AYNI instance bir sonraki round için tekrar kullanılabilir ({@code rounds>1} parametresi bunu kanıtlar:
+ * aynı {@code CyclicBarrier} nesnesi 2. round'da da çalışır, yeni bir tane oluşturmaya gerek yoktur).
  */
 @Service
 public class CyclicBarrierLab {

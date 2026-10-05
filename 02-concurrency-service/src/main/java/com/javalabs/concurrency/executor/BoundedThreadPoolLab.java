@@ -19,14 +19,27 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Lab 3 — Bounded ThreadPoolExecutor + Rejection.
  *
- * <p>Production açısından kritik olan ExecutorService davranışı sadece "kaç thread" değildir: queue'nun
- * SINIRLI olması ve dolduğunda ne olacağıdır. Burada {@link ArrayBlockingQueue} (sabit kapasite) ve
- * queue dolduğunda çağıranı bloklamadan task'ı REDDEDEN custom bir {@link RejectedExecutionHandler}
- * kullanılır. Bu, backpressure'ın en temel production tekniğidir: "daha fazla kaldıramıyorum" sinyalini
- * hemen ver, sessizce queue'da biriktirip memory'yi/latency'yi patlatma.
+ * <p>PROBLEM: Lab 2'deki (FixedThreadPool) kuyruk SINIRSIZDI — kapasiteyi aşan her iş sessizce kuyrukta
+ * birikiyordu. Sistem kapasitesinin ÜZERİNDE iş gelmeye devam ederse (arrival-rate > service-rate),
+ * bu kuyruk sonsuza kadar RAM'de büyür. Bazen "daha fazla kaldıramıyorum" demek, sessizce biriktirmekten
+ * daha sağlıklıdır — buna **backpressure** denir.
  *
- * <p>corePoolSize/maxPoolSize/queueCapacity request'ten DEĞİL config'ten gelir (concurrency-lab.bounded-executor):
- * bu sabitler bir business/kapasite kararıdır, her HTTP çağrısında keyfi değiştirilecek bir parametre değildir.
+ * <p>ÇÖZÜM: {@link ArrayBlockingQueue} (sabit kapasite, varsayılan 10) + bu kapasite dolduğunda yeni
+ * task'ı hemen REDDEDEN custom bir {@link RejectedExecutionHandler}. Somut örnek (varsayılan config:
+ * core=5, max=10, queue=10), 40 iş birden gelirse:
+ * <pre>
+ *   İş 1-5    -> core worker'lar hemen çalışmaya başlar (aktif: 5)
+ *   İş 6-10   -> core dolu, yeni worker açılır (max'a kadar)    (aktif: 10)
+ *   İş 11-20  -> worker'lar dolu (10/10), queue'ya girer         (queue: 10/10)
+ *   İş 21-40  -> worker'lar VE queue dolu -> HEMEN REDDEDİLİR    (rejected: 20)
+ * </pre>
+ * Gerçek test sonucu tam olarak budur: {@code accepted=20, rejected=20}. Kabul edilen 20 = maxPoolSize(10)
+ * + queueCapacity(10); fazlası reddedilir.
+ *
+ * <p>DİKKAT: {@code corePoolSize}/{@code maxPoolSize}/{@code queueCapacity} request'ten DEĞİL config'ten
+ * gelir (`concurrency-lab.bounded-executor`): bunlar bir business/kapasite kararıdır, her HTTP çağrısında
+ * keyfi değiştirilecek bir parametre değildir — gerçek bir sistemde de bu sayılar load-test'lerle belirlenir,
+ * rastgele seçilmez.
  */
 @Service
 public class BoundedThreadPoolLab {

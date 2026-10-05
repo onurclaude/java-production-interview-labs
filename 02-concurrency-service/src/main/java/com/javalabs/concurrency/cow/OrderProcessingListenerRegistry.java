@@ -13,18 +13,26 @@ import java.util.concurrent.CopyOnWriteArrayList;
 /**
  * Lab 13 — CopyOnWriteArrayList: "Order Processing Listener Registry".
  *
- * <p>Gerçek senaryo: her order işlendiğinde TÜM registered listener'lar (inventory güncelleme,
- * bildirim gönderme, vb.) sırayla/iterate edilerek çağrılır — bu ÇOK SIK olur. Yeni bir listener
- * eklemek/kaldırmak ise NADİR bir admin/deployment operasyonudur. CopyOnWriteArrayList bu asimetriye
- * göre tasarlanmıştır: okuma/iterate etme asla lock gerektirmez ve asla
- * {@link ConcurrentModificationException} fırlatmaz; her write (add/remove) backing array'in TAMAMINI
- * kopyalar.
+ * <p>PROBLEM: Her order işlendiğinde TÜM registered listener'lar (inventory güncelleme, bildirim
+ * gönderme, vb.) sırayla iterate edilip çağrılır — bunu günde on binlerce kez yapıyoruz. Yeni bir
+ * listener eklemek/kaldırmak ise ayda birkaç kez olan NADİR bir admin/deployment operasyonudur. Normal
+ * bir {@code ArrayList} kullansaydık ne olurdu? Bir thread listeyi iterate ederken başka bir thread
+ * ekleme/çıkarma yapsa {@code ConcurrentModificationException} fırlardı — ya da bu listeyi normal bir
+ * lock'la korusaydık, SANİYEDE ON BİNLERCE okuma her seferinde (gereksiz yere, çünkü okuma okumayla asla
+ * çakışmaz) kilit almak zorunda kalırdı.
  *
- * <p>NEDEN write-heavy sistemde KÖTÜ olabilir? Her add()/remove() O(n) bir array kopyalama maliyeti
- * taşır. Liste büyükse (binlerce eleman) ve mutation SIK ise (saniyede yüzlerce kez), bu kopyalama
- * maliyeti ciddi CPU/GC baskısı yaratır. Bu lab'da liste bilinçli olarak KÜÇÜK tutulmuştur (write
- * maliyetini canlı ÖLÇMEK için değil, sadece mekanizmayı göstermek için) — gerçek write-heavy/large-collection
- * senaryosunda CopyOnWriteArrayList YANLIŞ seçim olurdu (bkz. README Production Trade-offs).
+ * <p>ÇÖZÜM — "yazarken kopyala": {@code CopyOnWriteArrayList.iterator()} çağrıldığı ANDAKİ backing array
+ * üzerinde çalışan bir SNAPSHOT döner. Bu snapshot sabittir; iterasyon sürerken liste değişse bile bu
+ * iterator'ı ETKİLEMEZ — ne {@code ConcurrentModificationException} fırlar ne de yeni eklenen elemanı
+ * görür. Her {@code add()}/{@code remove()} ise backing array'in TAMAMININ yeni bir kopyasını oluşturur
+ * ve referansı atomik olarak değiştirir — okuyanlar bunu asla "yarı güncellenmiş" göremez.
+ *
+ * <p>DİKKAT — write-heavy sistemde NEDEN KÖTÜ olabilir? Her {@code add()}/{@code remove()} O(n) bir array
+ * kopyalama maliyeti taşır. Liste büyükse (binlerce eleman) ve mutation da SIK ise (saniyede yüzlerce kez),
+ * bu kopyalama ciddi CPU/GC baskısı yaratır — "write-rare" varsayımı burada BOZULUR. Bu lab'da liste
+ * bilinçli olarak KÜÇÜK tutulmuştur (write maliyetini canlı ÖLÇMEK için değil, snapshot mekanizmasını
+ * göstermek için); gerçek write-heavy/large-collection senaryosunda CopyOnWriteArrayList YANLIŞ seçim
+ * olurdu (bkz. README Production Trade-offs).
  */
 @Component
 public class OrderProcessingListenerRegistry {

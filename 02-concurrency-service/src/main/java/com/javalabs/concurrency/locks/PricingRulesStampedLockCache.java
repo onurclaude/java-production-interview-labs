@@ -14,10 +14,23 @@ import java.util.concurrent.locks.StampedLock;
 /**
  * Lab 11 — StampedLock: aynı read-heavy pricing senaryosu, ama bu kez OPTIMISTIC READ öğretilir.
  *
- * <p>ReadWriteLock'tan (Lab 10) temel fark: {@code tryOptimisticRead()} gerçek bir lock ALMAZ — sadece
- * o anki stamp'i okur. Okuma sırasında başka bir thread write lock aldıysa (reload), {@code validate()}
- * bunu yakalar ve GEÇERSİZ döner; bu durumda normal {@code readLock()} ile GÜVENLİ fallback yapılır.
- * Kazanç: write çok NADİR olduğu sürece reader'lar hiç lock almadan (CAS/volatile read kadar ucuz) okur.
+ * <p>PROBLEM: Lab 10'daki {@code readLock()} write olmasa bile her reader için gerçek bir lock alıp
+ * bırakmaktan (reader sayacını artırıp azaltmaktan) oluşuyordu — ucuzdur ama bedava değildir. Okuma
+ * SANİYEDE ON BİNLERCE kez oluyorsa bu maliyet bile hissedilmeye başlar.
+ *
+ * <p>ÇÖZÜM — OPTIMISTIC READ, reader'ın kendi kendine söylediği şudur: "Şimdilik hiç lock almadan
+ * okuyayım, bitince araya bir yazma girip girmediğini kontrol ederim." Adım adım:
+ * <pre>
+ *   1) stamp = lock.tryOptimisticRead()   // LOCK YOK, sadece o anki "versiyon numarası" alınır
+ *   2) price = map.get(productId)         // veri lock'suz okunur (okurken araya write girebilir!)
+ *   3) lock.validate(stamp)               // "ben okurken stamp değişti mi?"
+ *        -> DEĞİŞMEDİYSE: okuduğum değer GÜVENİLİR, kullanabilirim (lock hiç alınmadı -> çok ucuz)
+ *        -> DEĞİŞTİYSE: okuduğum değer ŞÜPHELİ, normal readLock() ile GÜVENLİ şekilde TEKRAR oku (fallback)
+ * </pre>
+ * Kazanç: write çok NADİR olduğu sürece reader'lar neredeyse hiç lock almadan (volatile read kadar ucuz)
+ * okur. Bu lab'da deterministik bir fallback demosu da var ({@code demoForcedFallback}): optimistic read
+ * ile validate() arasına bilerek bir pencere açıp arada GERÇEK bir reload tetikliyoruz, böylece fallback'in
+ * gerçekleştiğini şansa bırakmadan gösterebiliyoruz.
  *
  * <p>StampedLock NEDEN HER ZAMAN ReadWriteLock yerine kullanılmamalı?
  * <ul>
@@ -106,8 +119,9 @@ public class PricingRulesStampedLockCache {
      *
      * <p>Gerçek hayatta optimistic read'in fallback'e düşmesi RACE'E BAĞLIDIR: concurrent bir write'ın
      * TAM OLARAK optimistic read ile validate() arasına denk gelmesi gerekir. Bu şansa bırakılırsa lab
-     * tekrar üretilebilir olmaz (section 40). Bu yüzden burada o pencereyi BİLİNÇLİ OLARAK genişletip
-     * (LAB ONLY delay) arada GERÇEK bir reload tetikleyip join ile bitmesini garanti ediyoruz.
+     * her çalıştırmada farklı (bazen hiç fallback görünmeyen) bir sonuç verirdi. Bu yüzden burada o
+     * pencereyi BİLİNÇLİ OLARAK genişletip (LAB ONLY delay) arada GERÇEK bir reload tetikleyip join ile
+     * bitmesini garanti ediyoruz.
      * Fallback'in KENDİSİ gerçektir (StampedLock'un normal validate() mekanizması) — sadece zamanlama
      * şansa bırakılmıyor. Bunu bir coordination primitive'in (CountDownLatch/CyclicBarrier) ABA/StampedLock
      * problemini "çözdüğü" şeklinde yanlış sunmuyoruz; sadece deterministik hale getiriyoruz.

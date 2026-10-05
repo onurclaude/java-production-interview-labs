@@ -23,10 +23,22 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Lab 2 — FixedThreadPool.
  *
- * <p>AYNI CustomerCheckSimulator kullanılır (Platform/Virtual lab'larıyla karşılaştırılabilir olsun diye).
- * Fark: task'lar artık kendi thread'lerini açmaz, sabit sayıda worker'dan oluşan bir havuza GİRER.
- * poolSize'dan fazla task geldiğinde fazlalık, Executors.newFixedThreadPool()'un içindeki
- * LinkedBlockingQueue'da SINIRSIZ şekilde birikir (bkz. Lab 3 — bu, production'daki asıl risktir).
+ * <p>GÜNLÜK HAYAT BENZETMESİ: 100 işimiz var ama sadece 10 çalışanımız (worker = thread) var. Aynı anda
+ * en fazla 10 iş işlenebilir; 11. iş, bir çalışan boşalana kadar SIRADA (queue) bekler. {@code poolSize}
+ * = çalışan sayısı.
+ *
+ * <p>AYNI {@link CustomerCheckSimulator} kullanılır (Platform Thread lab'ıyla — Lab 1 — karşılaştırılabilir
+ * olsun diye, aynı iş yükü). Fark: task'lar artık KENDİ thread'lerini açmaz (Lab 1'deki gibi), sabit sayıda
+ * worker'dan oluşan bir havuza GİRER. {@code newFixedThreadPool(poolSize)} ham thread açmaktan daha
+ * kontrollüdür çünkü aynı anda çalışan OS thread sayısını {@code poolSize} ile SINIRLAR (Lab 1'de bu
+ * sınır yoktu, taskCount kadar thread açılıyordu).
+ *
+ * <p>DİKKAT — production riski: 100 iş değil 1.000.000 iş birden gelirse ne olur? {@code poolSize}
+ * dolduğunda fazla işler worker'ları BEKLEMEZ diye reddedilmez — Executors.newFixedThreadPool()'un içindeki
+ * {@code LinkedBlockingQueue} SINIRSIZDIR, yani kuyruk sessizce büyümeye devam eder. 1 milyon iş = kuyrukta
+ * 1 milyon bekleyen task = büyüyen heap, artan GC baskısı, sonunda OutOfMemoryError. "FixedThreadPool
+ * kullandım, kontrollüyüm" yanılgısı tam olarak burada kırılır — kontrollü olan sadece worker SAYISIDIR,
+ * kuyruk BÜYÜKLÜĞÜ değil (bkz. Lab 3, kuyruğu da sınırlayan {@code ThreadPoolExecutor}).
  */
 @Service
 public class FixedThreadPoolLab {

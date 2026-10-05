@@ -15,19 +15,35 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 /**
  * Lab 10 — ReadWriteLock: "Local Pricing Rules Cache".
  *
- * <p>Gerçek senaryo: pricing rule'ları SIK okunur (her order için), ama NADİREN reload edilir (bir
- * config güncellemesinde). ReentrantReadWriteLock bu asimetriyi tam olarak modeller: birden fazla reader
- * AYNI ANDA okuyabilir (readLock paylaşımlıdır); reload sırasında ise writer TEK BAŞINA, exclusive erişim
- * ister (diğer tüm reader/writer'ları bloklar).
+ * <p>PROBLEM: Pricing rule'ları SANİYEDE BİNLERCE kez okunuyor (her order fiyat kontrolü yapıyor), ama
+ * sadece birkaç DAKİKADA bir reload ediliyor (bir config güncellemesinde). Normal bir {@code synchronized}
+ * blok kullansaydık ne olurdu? Okuma bile exclusive bir kilit isterdi — yani:
+ * <pre>
+ *   Reader-A lock alır, okur, bırakır
+ *   Reader-B bu sırada (A hâlâ okurken) GEREKSİZ YERE bekler  -- ikisi de sadece OKUYOR, çakışma yok!
+ * </pre>
+ * Oysa iki reader'ın aynı anda okuması TAMAMEN GÜVENLİDİR (hiçbiri veriyi değiştirmiyor). synchronized
+ * bunu AYIRT EDEMEZ, okuma da yazma da aynı kilide girer.
  *
- * <p>Neden synchronized değil? synchronized her erişimi (okuma dahil) sırayla serileştirir; read-heavy bir
- * yükte bu gereksiz bir bottleneck'tir. ReadWriteLock okumaları paralelleştirir.
+ * <p>ÇÖZÜM: {@code ReentrantReadWriteLock} okuma ile yazmayı AYRI kilitler olarak ele alır:
+ * <pre>
+ *   Reader-A readLock() alır  -> girer
+ *   Reader-B readLock() alır  -> A'yı BEKLEMEZ, O DA GİRER (okuma paylaşımlı/shared)
+ *   Reader-C readLock() alır  -> O DA GİRER
+ *   Writer (reload) writeLock() ister -> A, B, C bitene kadar BEKLER (yazma exclusive)
+ *   Writer yazarken yeni gelen Reader-D -> Writer bitene kadar BEKLER
+ * </pre>
+ * Gerçek test: 5 paralel GET isteği gönderildiğinde {@code maxObservedConcurrentReaders=4} gözlemlendi —
+ * yani reader'lar GERÇEKTEN aynı anda içeride.
  *
- * <p>Neden ConcurrentHashMap yeterli OLMAYABİLİR? Tek bir key'in get/put'u ConcurrentHashMap ile zaten
- * thread-safe'tir. Ama burada ihtiyaç "TÜM price map'ini ATOMİK olarak değiştirmek" (reload sırasında
- * reader'ların YARI GÜNCELLENMİŞ bir map görmemesi) — tek bir ConcurrentHashMap.replaceAll() bunu
- * garanti etmez çünkü reload "yeni bir map hazırla, sonra referansı değiştir" şeklinde çalışır. Burada
- * asıl kazanç map referansının write lock altında ATOMİK değişmesidir, sadece thread-safe erişim değil.
+ * <p>DİKKAT — ConcurrentHashMap yeterli olmaz mıydı? Tek bir key'in get/put'u ConcurrentHashMap ile zaten
+ * thread-safe'tir. Ama burada ihtiyaç "TÜM price map'ini TEK SEFERDE, ATOMİK olarak değiştirmek" (reload
+ * sırasında bir reader'ın YARI GÜNCELLENMİŞ bir map görmemesi). Reload "yeni bir map hazırla, sonra
+ * referansı değiştir" şeklinde çalışır; tek bir {@code ConcurrentHashMap.replaceAll()} çağrısı bunu garanti
+ * etmez. Asıl kazanç, map referansının write lock altında ATOMİK değişmesidir — salt thread-safe erişim
+ * değil. Bu lock, SADECE okuma gerçekten sıksa ve yazma gerçekten nadirse anlamlıdır; aksi halde (yazma da
+ * sıksa) writer'lar sürekli reader'ları bloklar ve kazanç kaybolur — o durumda basit bir
+ * {@code synchronized} + ConcurrentHashMap bile yeterli olabilirdi.
  */
 @Component
 public class PricingRulesReadWriteLockCache {

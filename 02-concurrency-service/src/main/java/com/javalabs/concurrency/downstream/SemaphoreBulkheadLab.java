@@ -19,19 +19,28 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Lab 6 — GOOD: Virtual Thread + Semaphore (bulkhead).
  *
- * <p>Virtual Thread ile Semaphore birbirinin ALTERNATİFİ DEĞİLDİR:
- * <ul>
- *   <li>Virtual Thread: task execution modelini ölçekler (çok task'ı az OS thread ile çalıştırır).</li>
- *   <li>Semaphore: downstream (fraud provider) concurrency KAPASİTESİNİ korur — kaynağı kim çağırdığından
- *       bağımsız olarak "aynı anda en fazla N çağrı" garantisi verir.</li>
- * </ul>
- * Burada ikisi BİRLİKTE kullanılır: Virtual Thread çok sayıda isteği ucuza ifade eder, Semaphore bu
- * isteklerin provider'a aynı anda en fazla permits() kadarının ulaşmasını garanti eder.
+ * <p>PROBLEM: {@link UncontrolledDownstreamLab} (Lab 5) otobüsteki 500 kişiyi doğrudan 10 kişilik kapıya
+ * gönderip overload'a sebep oluyordu. Virtual Thread'den vazgeçmeden bunu nasıl önleriz?
  *
- * <p>Semaphore tek bir JVM'in bellek alanında yaşar: 3 pod varsa 3 ayrı Semaphore(10) vardır ve
- * provider'a toplamda 30 concurrent request gidebilir. Global limit için distributed bir koordinasyon
- * noktası (örn. Redis tabanlı bir rate limiter) gerekir — BU LAB'DA IMPLEMENT EDİLMEMİŞTİR, sadece sınırı
- * doğru anlamak önemlidir (bkz. README "JVM-local vs Distributed Concurrency").
+ * <p>ÇÖZÜM: Kapının önüne, provider'ın kapasitesi kadar ({@code permits}) GİRİŞ KARTI olan bir kart
+ * dağıtıcısı koyuyoruz — bu, {@link Semaphore}'un ta kendisidir:
+ * <ul>
+ *   <li>İçeri girmek isteyen her istek önce {@code tryAcquire()}/{@code acquire()} ile bir KART ister.</li>
+ *   <li>10 kart varsa, 10. isteğe kadar herkes kart alır ve içeri girer (provider'ı çağırır).</li>
+ *   <li>11. istek geldiğinde kart KALMAMIŞTIR: ya kart boşalana kadar BEKLER ({@code acquire()}),
+ *       ya da belirli bir süre bekleyip vazgeçer ({@code tryAcquire(timeout)}).</li>
+ *   <li>İş bitince kart GERİ VERİLİR ({@code release()}) — böylece sıradaki istek kartı alabilir.</li>
+ * </ul>
+ * Virtual Thread ile Semaphore birbirinin ALTERNATİFİ DEĞİLDİR, iki farklı katmanı çözerler:
+ * Virtual Thread TASK EXECUTION modelini ölçekler (500 kişiyi otobüse bindirebiliriz); Semaphore
+ * DOWNSTREAM KAPASİTESİNİ korur (kapıdan aynı anda sadece 10 kişi geçer). Burada ikisi BİRLİKTE
+ * kullanılır.
+ *
+ * <p>DİKKAT (JVM-local sınır): Bu kart dağıtıcısı sadece BU JVM'in belleğinde yaşar. Uygulama 3 pod
+ * olarak çalışıyorsa, her pod'un kendi 10 kartlık dağıtıcısı olur ve provider'a toplamda 30 concurrent
+ * request gidebilir — tıpkı 01-atomic-service'teki AtomicInteger'ın multi-pod sınırı gibi. Global limit
+ * için paylaşılan bir koordinasyon noktası (örn. Redis tabanlı bir rate limiter) gerekir; BU LAB BUNU
+ * IMPLEMENT ETMEZ, sadece sınırı doğru anlamanız içindir (bkz. README "JVM-local vs Distributed Concurrency").
  */
 @Service
 public class SemaphoreBulkheadLab {
@@ -90,6 +99,17 @@ public class SemaphoreBulkheadLab {
                 stats.observedMaxConcurrency(), stats.limitRespected(), elapsedMs, note);
     }
 
+    /**
+     * Tek bir isteğin kart alma -> kapıdan geçme -> kartı geri verme döngüsü.
+     *
+     * <p>{@code release()} NEDEN finally İÇİNDE? Şunu düşünün: 100 istek, 10 kart. Her istek kartı aldıktan
+     * sonra provider'ı çağırıyor. Eğer provider o çağrıda exception fırlatırsa (örn. {@code fail=true} ya
+     * da burada: provider'ın kendi kapasite kontrolü) ve {@code release()} finally DIŞINDA bir yerde olsaydı,
+     * o kart ASLA GERİ VERİLMEZDİ. 10 çağrıdan 3'ü böyle başarısız olsa, elimizde fiilen 7 kart kalırdı —
+     * Semaphore'un kendi sayacı hâlâ "10 kapasitem var" dese de gerçek kapasite sessizce erirdi. Bu, tıpkı
+     * 01-atomic-service'teki "counter leak" bug'ının Semaphore karşılığıdır: kaynağı almak her zaman
+     * kaynağı geri vermeyi GARANTİ ETMEZ, bunu dilin {@code finally} mekanizmasıyla zorlamak gerekir.
+     */
     private void callProviderThroughGate(int orderId, boolean useTimeout, long timeoutMs, AtomicInteger accepted,
                                           AtomicInteger rejectedOrTimedOut) {
         boolean permitAcquired = acquirePermit(useTimeout, timeoutMs);
@@ -97,9 +117,6 @@ public class SemaphoreBulkheadLab {
             rejectedOrTimedOut.incrementAndGet();
             return;
         }
-        // Permit release KESİNLİKLE finally içinde: provider.check() exception fırlatsa (örn. simulated
-        // failure) bile permit geri verilmezse, bu permit kalıcı olarak kaybolur ve Semaphore zamanla
-        // "sahte doluluğa" kilitlenir (gerçek kapasite varken kabul etmeyi durdurur) — en klasik Semaphore bug'ı.
         try {
             fraudProvider.check("order-" + orderId);
             accepted.incrementAndGet();
